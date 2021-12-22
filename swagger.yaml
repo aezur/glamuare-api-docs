@@ -1,718 +1,1714 @@
----
-swagger: "2.0"
+# ///// SETUP /////
+openapi: 3.0.0
+servers:
+  # Added by API Auto Mocking Plugin
+  - description: SwaggerHub API Auto Mocking
+    url: https://virtserver.swaggerhub.com/glamuare/GlamuareAPI/1.0.0
+  - description: 'Glamuare Application Server'
+    url: 'https://europe-west2-cosmetics-dev-a0f0f.cloudfunctions.net/'
 info:
-  description: "This is a sample server Petstore server.  You can find out more about\
-    \ Swagger at [http://swagger.io](http://swagger.io) or on [irc.freenode.net, #swagger](http://swagger.io/irc/).\
-    \  For this sample, you can use the api key `special-key` to test the authorization\
-    \ filters."
-  version: "1.0.5"
-  title: "Swagger Petstore"
-  termsOfService: "http://swagger.io/terms/"
+  description: 'Glamuare Api'
+  version: '1.0.0'
+  title: 'Glamuare Api'
   contact:
-    email: "apiteam@swagger.io"
+    email: 'sean@gmail.com'
   license:
-    name: "Apache 2.0"
-    url: "http://www.apache.org/licenses/LICENSE-2.0.html"
-host: "petstore.swagger.io"
-basePath: "/v2"
+    name: 'Commercial'
 tags:
-- name: "pet"
-  description: "Everything about your Pets"
-  externalDocs:
-    description: "Find out more"
-    url: "http://swagger.io"
-- name: "store"
-  description: "Access to Petstore orders"
-- name: "user"
-  description: "Operations about user"
-  externalDocs:
-    description: "Find out more about our store"
-    url: "http://swagger.io"
-schemes:
-- "https"
-- "http"
+  - name: 'bookings'
+    description: 'Operations related to Bookings'
+  - name: 'images'
+    description: 'Operations related to Images'
+  - name: 'metrics'
+    description: 'Operations related to Salon metrics.'
+  - name: 'salon'
+    description: 'Operations related to Salon.'
+  - name: 'tips'
+    description: 'Operations related to Tips.'
+  - name: 'accounts'
+    description: 'Operations related to Stripe Accounts.'
+  - name: 'kyc'
+    description: 'Operations related to Know Your Customer.'
+  - name: 'payments'
+    description: 'Operations related to Payments.'
+    
+
+# ///// ROUTES /////
+
+# Booking Routes
 paths:
-  /pet/{petId}/uploadImage:
+  /bookings:
     post:
       tags:
-      - "pet"
-      summary: "uploads an image"
-      description: ""
-      operationId: "uploadFile"
-      consumes:
-      - "multipart/form-data"
-      produces:
-      - "application/json"
-      parameters:
-      - name: "petId"
-        in: "path"
-        description: "ID of pet to update"
+        - bookings
+      summary: 'create a booking'
+      description: 'Adds a booking to the database, and queues a transferFunds job for the end time of the booking.'
+      requestBody:
         required: true
-        type: "integer"
-        format: "int64"
-      - name: "additionalMetadata"
-        in: "formData"
-        description: "Additional data to pass to server"
-        required: false
-        type: "string"
-      - name: "file"
-        in: "formData"
-        description: "file to upload"
-        required: false
-        type: "file"
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Booking'
       responses:
-        200:
-          description: "successful operation"
-          schema:
-            $ref: "#/definitions/ApiResponse"
-      security:
-      - petstore_auth:
-        - "write:pets"
-        - "read:pets"
-  /pet:
+        '200':
+          description: 'Booking created.'
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id:
+                    $ref: '#/components/schemas/FirebaseId'
+        '401':
+          description: 'Unauthenticated.'
+        '422':
+          description: 'Invalid Input.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BadParamsError'
+        '500':
+          description: 'Failed to connect to firebase / Unknown error.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+    patch:
+      tags:
+        - bookings
+      summary: 'update a booking'
+      description: 'Updates a booking. The time, address, and employee can be updated. An update has to occur at least 48 hours before the current start time.'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+               - booking_id
+               - booking
+              properties:
+                booking_id:
+                  $ref: '#/components/schemas/FirebaseId'
+                booking:
+                  type: object
+                  properties:
+                    time:
+                      $ref: '#/components/schemas/FirebaseTimestamp'
+                    employee:
+                      $ref: '#/components/schemas/Employee'
+                    address:
+                      $ref: '#/components/schemas/Address'
+      responses:
+        '200':
+          description: 'Booking updated.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+        '400':
+          description: 'User error.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: 'Unauthenticated.'
+        '412':
+          description: 'Failed precondition.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: 'Invalid Input.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BadParamsError'
+        '500':
+          description: 'Failed to connect to firebase / Unknown error.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /bookings/cancel:
     post:
       tags:
-      - "pet"
-      summary: "Add a new pet to the store"
-      description: ""
-      operationId: "addPet"
-      consumes:
-      - "application/json"
-      - "application/xml"
-      produces:
-      - "application/json"
-      - "application/xml"
-      parameters:
-      - in: "body"
-        name: "body"
-        description: "Pet object that needs to be added to the store"
+        - bookings
+      summary: 'cancel a booking'
+      description: 'Updates a booking. The time, address, and employee can be updated. An update has to occur at least 48 hours before the current start time.'
+      requestBody:
         required: true
-        schema:
-          $ref: "#/definitions/Pet"
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                 - booking_id
+              properties:
+                booking_id:
+                  $ref: '#/components/schemas/FirebaseId'
+                message:
+                  type: string
+                  example: 'Sorry for cancelling!'
+                  description: 'Message left for the salon.'
+          
       responses:
-        405:
-          description: "Invalid input"
-      security:
-      - petstore_auth:
-        - "write:pets"
-        - "read:pets"
-    put:
-      tags:
-      - "pet"
-      summary: "Update an existing pet"
-      description: ""
-      operationId: "updatePet"
-      consumes:
-      - "application/json"
-      - "application/xml"
-      produces:
-      - "application/json"
-      - "application/xml"
-      parameters:
-      - in: "body"
-        name: "body"
-        description: "Pet object that needs to be added to the store"
-        required: true
-        schema:
-          $ref: "#/definitions/Pet"
-      responses:
-        400:
-          description: "Invalid ID supplied"
-        404:
-          description: "Pet not found"
-        405:
-          description: "Validation exception"
-      security:
-      - petstore_auth:
-        - "write:pets"
-        - "read:pets"
-  /pet/findByStatus:
-    get:
-      tags:
-      - "pet"
-      summary: "Finds Pets by status"
-      description: "Multiple status values can be provided with comma separated strings"
-      operationId: "findPetsByStatus"
-      produces:
-      - "application/json"
-      - "application/xml"
-      parameters:
-      - name: "status"
-        in: "query"
-        description: "Status values that need to be considered for filter"
-        required: true
-        type: "array"
-        items:
-          type: "string"
-          enum:
-          - "available"
-          - "pending"
-          - "sold"
-          default: "available"
-        collectionFormat: "multi"
-      responses:
-        200:
-          description: "successful operation"
-          schema:
-            type: "array"
-            items:
-              $ref: "#/definitions/Pet"
-        400:
-          description: "Invalid status value"
-      security:
-      - petstore_auth:
-        - "write:pets"
-        - "read:pets"
-  /pet/findByTags:
-    get:
-      tags:
-      - "pet"
-      summary: "Finds Pets by tags"
-      description: "Multiple tags can be provided with comma separated strings. Use\
-        \ tag1, tag2, tag3 for testing."
-      operationId: "findPetsByTags"
-      produces:
-      - "application/json"
-      - "application/xml"
-      parameters:
-      - name: "tags"
-        in: "query"
-        description: "Tags to filter by"
-        required: true
-        type: "array"
-        items:
-          type: "string"
-        collectionFormat: "multi"
-      responses:
-        200:
-          description: "successful operation"
-          schema:
-            type: "array"
-            items:
-              $ref: "#/definitions/Pet"
-        400:
-          description: "Invalid tag value"
-      security:
-      - petstore_auth:
-        - "write:pets"
-        - "read:pets"
-      deprecated: true
-  /pet/{petId}:
-    get:
-      tags:
-      - "pet"
-      summary: "Find pet by ID"
-      description: "Returns a single pet"
-      operationId: "getPetById"
-      produces:
-      - "application/json"
-      - "application/xml"
-      parameters:
-      - name: "petId"
-        in: "path"
-        description: "ID of pet to return"
-        required: true
-        type: "integer"
-        format: "int64"
-      responses:
-        200:
-          description: "successful operation"
-          schema:
-            $ref: "#/definitions/Pet"
-        400:
-          description: "Invalid ID supplied"
-        404:
-          description: "Pet not found"
-      security:
-      - api_key: []
+        '200':
+          description: 'Booking updated.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+        '400':
+          description: 'User error.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: 'Unauthenticated.'
+        '422':
+          description: 'Invalid Input.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BadParamsError'
+        '500':
+          description: 'Failed to connect to firebase / Unknown error.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+            
+            
+# Image Routes           
+  /img/resize:
     post:
       tags:
-      - "pet"
-      summary: "Updates a pet in the store with form data"
-      description: ""
-      operationId: "updatePetWithForm"
-      consumes:
-      - "application/x-www-form-urlencoded"
-      produces:
-      - "application/json"
-      - "application/xml"
-      parameters:
-      - name: "petId"
-        in: "path"
-        description: "ID of pet that needs to be updated"
+         - images
+      summary: 'resize an image'
+      description: 'Resize and save an image to firebase storage.'
+      requestBody:
         required: true
-        type: "integer"
-        format: "int64"
-      - name: "name"
-        in: "formData"
-        description: "Updated name of the pet"
-        required: false
-        type: "string"
-      - name: "status"
-        in: "formData"
-        description: "Updated status of the pet"
-        required: false
-        type: "string"
+        content:
+          multipart/form-data:
+            schema:
+              required:
+                 - image/*
+              properties:
+                width:
+                  type: integer
+                  description: 'Width of image.'
+                  minimum: 1
+                  maximum: 2048
+                height:
+                  type: integer
+                  description: 'Height of image.'
+                  minimum: 1
+                  maximum: 2048
+                fit:
+                  type: string
+                  enum: ['cover', 'contain', 'fill', 'inside', 'outside']
+                  example: 'inside'
+                  default: 'cover'
+                  description: 'Status of the object.'
+                image/*:    # Can be image/png, image/svg, image/gif, etc.
+                  type: string
+                  format: binary
       responses:
-        405:
-          description: "Invalid input"
-      security:
-      - petstore_auth:
-        - "write:pets"
-        - "read:pets"
-    delete:
-      tags:
-      - "pet"
-      summary: "Deletes a pet"
-      description: ""
-      operationId: "deletePet"
-      produces:
-      - "application/json"
-      - "application/xml"
-      parameters:
-      - name: "api_key"
-        in: "header"
-        required: false
-        type: "string"
-      - name: "petId"
-        in: "path"
-        description: "Pet id to delete"
-        required: true
-        type: "integer"
-        format: "int64"
-      responses:
-        400:
-          description: "Invalid ID supplied"
-        404:
-          description: "Pet not found"
-      security:
-      - petstore_auth:
-        - "write:pets"
-        - "read:pets"
-  /store/order:
+        '200':
+          description: 'Image Uploaded.'
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  url:
+                    $ref: '#/components/schemas/ImageUrl'
+        '401':
+          description: 'Unauthenticated.'
+        '422':
+          description: 'Invalid Input.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BadParamsError'
+        '500':
+          description: 'Failed to connect to firebase / Unknown error.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        
+# Metrics Routes
+  /metrics/badges:
     post:
       tags:
-      - "store"
-      summary: "Place an order for a pet"
-      description: ""
-      operationId: "placeOrder"
-      consumes:
-      - "application/json"
-      produces:
-      - "application/json"
-      - "application/xml"
-      parameters:
-      - in: "body"
-        name: "body"
-        description: "order placed for purchasing the pet"
+         - metrics
+      summary: 'metrics for badge display'
+      description: 'Returns an array of objects to be consumed by the application. The following values are returned - Completed, Cancelled, Appointments, Reviews, and Tips.'
+      requestBody:
         required: true
-        schema:
-          $ref: "#/definitions/Order"
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TimeSpan'
+              
       responses:
-        200:
-          description: "successful operation"
-          schema:
-            $ref: "#/definitions/Order"
-        400:
-          description: "Invalid Order"
-  /store/order/{orderId}:
+        '200':
+          description: 'Query Successful.'
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    key:
+                      type: string
+                      enum: [
+                        'Upcoming',
+                        'Completed',
+                        'Cancelled',
+                        'Appointments',
+                        'Reviews',
+                        'Tips'
+                      ]
+                      description: 'Key for the associated badge.'
+                    value:
+                      type: number
+                      example: 22
+        '401':
+          description: 'Unauthenticated.'
+        '422':
+          description: 'Invalid Input.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BadParamsError'
+        '500':
+          description: 'Failed to connect to firebase / Unknown error.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        
+  /metrics/balance:
     get:
       tags:
-      - "store"
-      summary: "Find purchase order by ID"
-      description: "For valid response try integer IDs with value >= 1 and <= 10.\
-        \ Other values will generated exceptions"
-      operationId: "getOrderById"
-      produces:
-      - "application/json"
-      - "application/xml"
-      parameters:
-      - name: "orderId"
-        in: "path"
-        description: "ID of pet that needs to be fetched"
-        required: true
-        type: "integer"
-        maximum: 10
-        minimum: 1
-        format: "int64"
+       - metrics
+      summary: retrieve stripe balance
+      description: 'Returns available and pending balance of current salon.'
       responses:
-        200:
-          description: "successful operation"
-          schema:
-            $ref: "#/definitions/Order"
-        400:
-          description: "Invalid ID supplied"
-        404:
-          description: "Order not found"
-    delete:
-      tags:
-      - "store"
-      summary: "Delete purchase order by ID"
-      description: "For valid response try integer IDs with positive integer value.\
-        \ Negative or non-integer values will generate API errors"
-      operationId: "deleteOrder"
-      produces:
-      - "application/json"
-      - "application/xml"
-      parameters:
-      - name: "orderId"
-        in: "path"
-        description: "ID of the order that needs to be deleted"
-        required: true
-        type: "integer"
-        minimum: 1
-        format: "int64"
-      responses:
-        400:
-          description: "Invalid ID supplied"
-        404:
-          description: "Order not found"
-  /store/inventory:
-    get:
-      tags:
-      - "store"
-      summary: "Returns pet inventories by status"
-      description: "Returns a map of status codes to quantities"
-      operationId: "getInventory"
-      produces:
-      - "application/json"
-      parameters: []
-      responses:
-        200:
-          description: "successful operation"
-          schema:
-            type: "object"
-            additionalProperties:
-              type: "integer"
-              format: "int32"
-      security:
-      - api_key: []
-  /user/createWithArray:
+        '200':
+          description: 'Success.'
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    available:
+                      type: number
+                      description: 'Salon balance available'
+                      example: 123
+                    pending:
+                      type: number
+                      description: 'Salon balance pending'
+                      example: 456
+        '401':
+          description: 'Unauthenticated.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BadParamsError'
+        '500':
+          description: 'Failed to connect to firebase / Unknown error.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /metrics/earnings:
     post:
       tags:
-      - "user"
-      summary: "Creates list of users with given input array"
-      description: ""
-      operationId: "createUsersWithArrayInput"
-      consumes:
-      - "application/json"
-      produces:
-      - "application/json"
-      - "application/xml"
-      parameters:
-      - in: "body"
-        name: "body"
-        description: "List of user object"
+       - metrics
+      summary: 'retrieve salon earnings'
+      description: 'Retrieve an earnins breakdown for given time period.'
+      requestBody:
         required: true
-        schema:
-          type: "array"
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TimeSpan'
+      responses:
+        '200':
+          description: 'Success. {`employee_uid`: { `date`: `value`}}'
+          content:
+            application/json:
+              schema:
+                type: object
+                example: '{"LMVyMwtZbm0N3unuvkl0":{"2021-11-25":123}}'
+
+        '401':
+          description: 'Unauthenticated.'
+        '422':
+          description: 'Invalid Input.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BadParamsError'
+        '500':
+          description: 'Failed to connect to firebase / Unknown error.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+                
+  /metrics/services:
+    post:
+      tags:
+       - metrics
+      summary: 'retrieve salon earnings'
+      description: 'Retrieve an earnins breakdown for given time period.'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TimeSpan'
+
+      responses:
+        '200':
+          description: 'Successful query.'
+          content:
+            application/json:
+                schema:
+                  type: object
+                  required:
+                    - services
+                  properties:
+                    services:
+                      type: array
+                      items:
+                        type: object
+                        properties:
+                          id:
+                            $ref: '#/components/schemas/FirebaseId'
+                          name:
+                            $ref: '#/components/schemas/ModelName'
+                          total:
+                            type: number
+                            description: 'Total amount of this service performed in time period.'
+                            example: 150
+                          totalPerc:
+                            type: number
+                            description: 'Percent of all bookings this service represents.'
+                            example: 66
+                          employees:
+                            type: object
+                            properties:
+                              name:
+                                $ref: '#/components/schemas/HumanName'
+                              total:
+                                type: number
+                                description: 'Total amount of this service performed in time period.'
+                                example: 15
+                              totalPerc:
+                                type: number
+                                description: 'Percent of this service performed by this employee represents.'
+        '401':
+          description: 'Unauthenticated.'
+        '422':
+          description: 'Invalid Input.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BadParamsError'
+        
+      
+  /salon/availability:
+    post:
+      tags:
+        - salon
+      summary: 'retrieve salon earnings'
+      description: 'Retrieve an earnins breakdown for given time period.'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: 
+               - employee_id
+               - month
+               - year
+               - duration
+              properties:
+                employee_id:
+                  $ref: '#/components/schemas/FirebaseId'
+                duration:
+                  type: number
+                  description: 'Duration of timeslot needed.'
+                  example: 15
+                month:
+                  type: number
+                  description: 'Numerical representation of month being queried.'
+                  example: 7
+                  minimum: 0
+                  maximum: 11
+                year:
+                  type: number
+                  description: '4 digit numerical representation of month. Minimum of current year.'
+                  example: 2030
+                
+
+      responses:
+        '200':
+          description: 'Successful query.'
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  availability:
+                    description: 'Number[][]. First layer is day of the month, second is timestamps of available bookings for given employee/duration.'
+                    type: array
+                    items:
+                      type: array
+                      example: [1640341800, 1640341800]
+                      items:
+                        type: number
+                
+        '401':
+          description: 'Unauthenticated.'
+        '422':
+          description: 'Invalid Input.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BadParamsError'
+        '500':
+          description: 'Failed to connect to firebase / Unknown error.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+      
+  /salon/search:
+    post:
+      tags:
+       - salon
+      summary: 'search listed salons'
+      description: 'Search for salons by teir text components.'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+               - text
+              properties:
+                text:
+                  type: string
+                  example: 'Ciaras salon'
+      responses:
+        '200':
+          description: 'Successful query.'
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Salon'
+        '401':
+          description: 'Unauthenticated.'
+        '422':
+          description: 'Invalid Input.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BadParamsError'
+        '500':
+          description: 'Failed to connect to firebase / Unknown error.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+      
+  /salon/radius:
+    post:
+      tags:
+       - salon
+      summary: 'get salons within radius'
+      description: 'Get an array of Salons within a radius of a given postion.'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+               - lat
+               - lng
+               - radius
+              properties:
+                lat:
+                  type: number
+                  description: 'Latitude being queried.'
+                  example: -57.0982
+                lng:
+                  type: number
+                  description: 'Longitude being queried.'
+                  example: 92.8267
+                  minimum: 0.1
+                radius:
+                  type: number
+                  description: 'Radius in KM to query.'
+                  example: 35
+                categories:
+                  type: array
+                  example: [0,4,5]
+                  description: 'Number array corresponding to Salon categories being queried.'
+                  items:
+                    type: number
+                    
+      responses:
+        '200':
+          description: 'Successful query.'
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Salon'
+        '401':
+          description: 'Unauthenticated.'
+        '422':
+          description: 'Invalid Input.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BadParamsError'
+        '500':
+          description: 'Failed to connect to firebase / Unknown error.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+                  
+      
+  /tip:
+    post:
+      tags:
+       - tips
+      summary: leave a tip
+      description: 'Leave a tip for a salon.'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+               - booking_id
+               - amount
+               - payment_intent
+              properties:
+                booking_id:
+                  $ref: '#/components/schemas/FirebaseId'
+                amount:
+                  type: number
+                  example: 40
+                  minimum: 1
+                payment_intent:
+                  $ref: '#/components/schemas/StripeId'
+                  
+      responses:
+        '200':
+          description: 'Success.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+        '401':
+          description: 'Unauthenticated.'
+        '422':
+          description: 'Invalid Input.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BadParamsError'
+        '500':
+          description: 'Failed to connect to firebase / Unknown error.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+          
+                
+  /accounts/business:
+    post:
+      tags:
+       - accounts
+      summary: 'create Stripe business account'
+      description: 'Creates a business account with Stripe.'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+               - company
+               - owner
+               - director
+              properties:
+                company:
+                  $ref: '#/components/schemas/StripeCompany'
+                owner:
+                  $ref: '#/components/schemas/Owner'
+                director:
+                  $ref: '#/components/schemas/Director'
+      responses:
+        '200':
+          description: 'Success.'
+        '401':
+          description: 'Unauthenticated.'
+        '422':
+          description: 'Invalid Input.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BadParamsError'
+        '500':
+          description: 'Failed to connect to firebase / Unknown error.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  
+  /accounts/individual:
+    post:
+      tags:
+       - accounts
+      summary: 'create Stripe individual account'
+      description: 'Creates a individual account with Stripe.'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+               - info
+               - product_description
+               - phone
+              
+              properties:
+                info:
+                  type: object
+                  allOf:
+                     - $ref: '#/components/schemas/StripePerson'
+                  properties:
+                    address:
+                      $ref: '#/components/schemas/StripeAddress'
+                product_description:
+                  type: object
+                  properties:
+                    product_description:
+                      $ref: '#/components/schemas/ProductDescription'
+                phone:
+                  type: object
+                  properties:
+                    phone:
+                      $ref: '#/components/schemas/Phone'
+
+      responses:
+        '200':
+          description: 'Success.'
+        '401':
+          description: 'Unauthenticated.'
+        '422':
+          description: 'Invalid Input.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BadParamsError'
+        '500':
+          description: 'Failed to connect to firebase / Unknown error.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  
+  
+  /accounts/bank:
+    get:
+      tags:
+       - accounts
+      summary: 'list Stripe bank accounts'
+      description: 'Lists all users bank accounts.'
+      responses:
+        '200':
+          description: 'Success.'
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  accounts:
+                    type: array
+                    description: 'Returns an array of the user stripe bank account objects.'
+                    items:
+                      type: object
+                      description: 'Stripe bank account object.'
+        '401':
+          description: 'Unauthenticated.'
+        '422':
+          description: 'Invalid Input.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BadParamsError'
+        '500':
+          description: 'Failed to connect to firebase / Unknown error.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+    
+    post:
+      tags:
+       - accounts
+      summary: 'create Stripe bank account'
+      description: 'Creates a bank account with Stripe.'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+               - token
+              properties:
+                token:
+                  $ref: '#/components/schemas/ClientSecret'
+      responses:
+        '200':
+          description: 'Success.'
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  account:
+                    type: object
+                    description: 'Returns the stripe bank account object.'
+        '401':
+          description: 'Unauthenticated.'
+        '422':
+          description: 'Invalid Input.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BadParamsError'
+        '500':
+          description: 'Failed to connect to firebase / Unknown error.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+                
+                
+  /accounts/bank/delete:
+    post:
+      tags:
+       - accounts
+      summary: 'delete Stripe bank account'
+      description: 'Deletes a bank account from Stripe.'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+               - bank_account
+              properties:
+                bank_account:
+                  $ref: '#/components/schemas/StripeId'
+      
+      responses:
+        '200':
+          description: 'Success.'
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  account:
+                    type: object
+                    description: 'Returns the deleted stripe bank account object.'
+        '401':
+          description: 'Unauthenticated.'
+        '422':
+          description: 'Invalid Input.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BadParamsError'
+        '500':
+          description: 'Failed to connect to firebase / Unknown error.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+                
+                
+                
+  /accounts/bank/default:
+    post:
+      tags:
+       - accounts
+      summary: 'sets default Stripe bank account'
+      description: 'Set a bank account to be the default used by Stripe actions.'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+               - bank_account
+              properties:
+                bank_account:
+                  $ref: '#/components/schemas/StripeId'
+      responses:
+        '200':
+          description: 'Success.'
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  account:
+                    type: object
+                    description: 'Returns the stripe bank account object.'
+        '401':
+          description: 'Unauthenticated.'
+        '422':
+          description: 'Invalid Input.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BadParamsError'
+        '500':
+          description: 'Failed to connect to firebase / Unknown error.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'     
+                
+  /kyc/verify:
+    post:
+      tags:
+       - kyc
+      summary: 'start verification session'
+      description: 'Starts a `know your customer` verification session with Stripe.'
+      responses:
+        '200':
+          description: 'Success.'
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  clientSecret:
+                    $ref: '#/components/schemas/StripeId'
+        '401':
+          description: 'Unauthenticated.'
+        '422':
+          description: 'Invalid Input.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BadParamsError'
+        '500':
+          description: 'Failed to connect to firebase / Unknown error.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+                
+                
+  /payment-intent/booking:
+    post:
+      tags:
+       - payments
+       - bookings
+      summary: 'start booking payment flow'
+      description: 'Creates a Stripe payment intent for a booking.'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+               - service_id
+               - payment_method
+              properties:
+                service_id:
+                  $ref: '#/components/schemas/StripeId'
+                payment_method:
+                  $ref: '#/components/schemas/StripeId'
+                needTravel:
+                  type: 'boolean'
+      responses:
+        '200':
+          description: 'Success.'
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id:
+                    $ref: '#/components/schemas/StripeId'
+                  secret:
+                    $ref: '#/components/schemas/StripeId'
+                  pricing:
+                    $ref: '#/components/schemas/PaymentBreakdown'
+        '401':
+          description: 'Unauthenticated.'
+        '422':
+          description: 'Invalid Input.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BadParamsError'
+        '500':
+          description: 'Failed to connect to firebase / Unknown error.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+                
+  /payment-intent/tip:
+    post:
+      tags:
+       - tips
+       - payments
+      summary: 'start tip payment flow'
+      description: 'Creates a Stripe payment intent for a tip.'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+               - payment_method
+               - amount
+              properties:
+                payment_method:
+                  $ref: '#/components/schemas/StripeId'
+                amount:
+                  type: number
+                  minimum: 1
+      responses:
+        '200':
+          description: 'Success.'
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id:
+                    $ref: '#/components/schemas/StripeId'
+                  secret:
+                    $ref: '#/components/schemas/StripeId'
+                  pricing:
+                    $ref: '#/components/schemas/PaymentBreakdown'
+        '401':
+          description: 'Unauthenticated.'
+        '422':
+          description: 'Invalid Input.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BadParamsError'
+        '500':
+          description: 'Failed to connect to firebase / Unknown error.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse' 
+                
+  /payment-intent/delete:
+    post:
+      tags:
+       - payments
+      summary: 'delete payment intent'
+      description: 'Deletes a Stripe payment intent.'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+               - payment_intent
+              properties:
+                payment_intent:
+                  $ref: '#/components/schemas/StripeId'
+                
+      responses:
+        '200':
+          description: 'Success.'
+          content:
+            application/json:
+              schema:
+                type: object
+                description: 'Deleted payment intent.'
+                    
+        '401':
+          description: 'Unauthenticated.'
+        '422':
+          description: 'Invalid Input.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BadParamsError'
+        '500':
+          description: 'Failed to connect to firebase / Unknown error.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse' 
+                
+                
+  /payment-methods:
+    post:
+      tags:
+       - payments
+      summary: 'create payment method'
+      description: 'Creates a payment method (bank card) for Stripe.'
+      responses:
+        '200':
+          description: 'Success.'
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  secret:
+                      $ref: '#/components/schemas/StripeId'
+                    
+        '401':
+          description: 'Unauthenticated.'
+        '500':
+          description: 'Failed to connect to firebase / Unknown error.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse' 
+                
+                
+    get:
+      tags:
+       - payments
+      summary: 'list payment methods'
+      description: 'List all payment methods (bank cards) for user.'
+      responses:
+        '200':
+          description: 'Returns an array of payment method objects from Stripe.'
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+        '401':
+          description: 'Unauthenticated.'
+        '500':
+          description: 'Failed to connect to firebase / Unknown error.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse' 
+      
+  /payment-methods/delete:
+    post:
+      tags:
+       - payments
+      summary: 'delete a payment method'
+      description: 'Deletes payment method.'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+               - payment_method
+              properties:
+                payment_method:
+                  $ref: '#/components/schemas/FirebaseId'
+      responses:
+        '200':
+          description: 'Success.'
+        '401':
+          description: 'Unauthenticated.'
+        '422':
+          description: 'Invalid Input.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BadParamsError'
+        '500':
+          description: 'Failed to connect to firebase / Unknown error.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse' 
+                
+  /payout:
+    post:
+      tags:
+       - payments
+      summary: 'request payout'
+      description: 'Request a payout from Stripe. Optionally, tell it which account to payout to.'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+               - amount
+              properties:
+                amount:
+                  type: number
+                  minimum: 1
+                token:
+                  allOf:
+                   - $ref: '#/components/schemas/StripeId' 
+                  description: 'Bank account to payout to. Default used if ommitted.'
+                
+      responses:
+        '200':
+          description: 'Success.'
+        '401':
+          description: 'Unauthenticated.'
+        '422':
+          description: 'Invalid Input.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BadParamsError'
+        '500':
+          description: 'Failed to connect to firebase / Unknown error.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse' 
+                
+                
+                
+                
+                
+                
+      
+      
+      
+      
+      
+      
+# ///// COMPONENTS /////
+components:
+  schemas:
+  
+    PaymentBreakdown:
+      type: object
+      properties:
+        price:
+          type: number
+        appFee:
+          type: number
+        serviceFee:
+          type: number
+        totalFee:
+          type: number
+        deposit:
+          type: number
+        total:
+          type: number
+        travelFee:
+          type: number
+    
+    ClientSecret:
+      type: string
+      description: 'client secret returned from stripe during `add card` flow.'
+      example: 'client_secret_awefubwkBFWiubgyqvfiuyv3ucj3ku'
+      
+    Owner:
+      type: object
+      description: 'Owner Object.'
+      required:
+       - info
+       - relationship
+      properties:
+        info:
+          $ref: '#/components/schemas/StripePerson'
+        relationship:
+          $ref: '#/components/schemas/StripeRelationship'
+          
+    Director:
+      type: object
+      description: 'Director Object.'
+      required:
+       - dob
+       - email
+       - name
+       - relationship
+      allOf:
+         - $ref: '#/components/schemas/StripePerson'
+      properties:
+        relationship:
+          $ref: '#/components/schemas/StripeRelationship'
+      
+  
+    StripePerson:
+      type: object
+      required:
+       - dob
+       - email
+       - name
+      properties:
+        dob:
+          type: object
+          required:
+           - dob
+          properties:
+            dob:
+              type: string
+              format: date-time
+        email:
+          type: object
+          required:
+            - email
+          properties:
+            email:
+              type: string
+              format: email
+        name:
+          type: object
+          required:
+           - firstName
+           - lastName
+          properties:
+            firstName:
+              type: string
+              example: 'Jane'
+            lastName:
+              type: string
+              example:
+               'Doe'
+
+    StripeRelationship:
+      type: object
+      required:
+       - relationship
+      properties:
+        relationship:
+          type: string
+          description: 'Relationshp to the company.'
+          example: 'Managing Director'
+  
+    StripeCompany:
+      type: object
+      description: 'Company data required by Stripe.'
+      required:
+       - name
+       - phone
+       - product_description
+       - tax_id
+       - address
+      properties:
+        name:
+          $ref: '#/components/schemas/ModelName'
+        phone:
+          $ref: '#/components/schemas/Phone'
+        product_description:
+          $ref: '#/components/schemas/ProductDescription'
+        tax_id:
+          $ref: '#/components/schemas/TaxId'
+        address:
+          $ref: '#/components/schemas/StripeAddress'
+      
+  
+    BadParamsError:
+      type: object
+      properties:
+        keyword:
+          type: string
+          description: 'The rule that was broken.'
+          example: 'required'
+        datapath:
+          type: string
+          description: 'The path to the offending data.'
+          example: 'user.name'
+        schemapath:
+          type: string
+          description: 'The schema path to the offense.'
+          example: '#/required'
+        message:
+          type: string
+          example: 'should have required property startAt'
+        params:
+          type: object
+          description: 'Json object containing which rules were broken.'
+          example: {"missingProperty":"name"}
+          properties:
+            rule:
+              type: string
+              description: 'Rule that was broken.'
+          
+  
+    TimeSpan:
+      type: object
+      required:
+       - startAt
+       - endAt
+      properties:
+        endAt:
+          $ref: '#/components/schemas/FirebaseTimestamp'
+        startAt:
+          $ref: '#/components/schemas/FirebaseTimestamp'
+  
+    Booking:
+      type: object
+      required:
+        - employee
+        - time
+        - customer
+        - service
+        - salon
+      properties:
+        id:
+          $ref: '#/components/schemas/FirebaseId'
+        employee:
+          $ref: '#/components/schemas/Employee'
+        time:
+          $ref: '#/components/schemas/FirebaseTimestamp'
+        address:
+          $ref: '#/components/schemas/Address'
+        customer:
+          $ref: '#/components/schemas/Customer'
+        needTravel:
+          type: boolean
+          description: 'Does this booking require the stylist to travel?'
+        payment_intent:
+          $ref: '#/components/schemas/StripeId'
+        payment_method:
+          $ref: '#/components/schemas/StripeId'
+        status:
+          $ref: '#/components/schemas/Status'
+        service:
+          $ref: '#/components/schemas/Service'
+        salon:
+          $ref: '#/components/schemas/Salon'
+          
+    MessageResponse:
+      type: object
+      properties:
+        message:
+          type: string
+          example: 'An informative message.'
+          description: 'A json response with a message..'
+          
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+          example: 'A message explaining the error.'
+          description: 'Error message.'
+          
+    Salon:
+      type: object
+      required:
+        - id
+        - address
+        - display
+
+      properties:
+        id:
+          $ref: '#/components/schemas/FirebaseId'
+        address:
+          $ref: '#/components/schemas/Address'
+        display:
+          $ref: '#/components/schemas/DisplayName'
+        phone:
+          $ref: '#/components/schemas/Phone'
+        profile_photo:
+          $ref: '#/components/schemas/ImageUrl'
+      
+      
+    Service:
+      type: object
+      required:
+       - name
+      properties:
+        name:
+          $ref: '#/components/schemas/ModelName'
+        duration:
+          type: number
+          example: 45
+          description: 'Duration in minutes.'
+        id:
+          $ref: '#/components/schemas/FirebaseId'
+        owner_id:
+          $ref: '#/components/schemas/FirebaseId'
+        price:
+          type: integer
+          example: 120
+          description: 'Service price in euro.'
+        travel_fee:
+          type: integer
+          example: 65
+          description: 'Call-out charge in euro.'
+        travel_radius:
+          type: integer
+          example: 50
+          description: 'Radius a salon will travel in KMs.'
+        will_travel:
+          type: boolean
+          description: 'Whether the salon will travel for services.'
+        
+          
+    Customer:
+      type: object
+      required:
+       - id
+       - display
+       - email
+       - phone
+      properties:
+        id:
+          $ref: '#/components/schemas/FirebaseId'
+        display:
+          $ref: '#/components/schemas/HumanName'
+        notes:
+          type: string
+          example: 'I need wheelchair access!'
+          description: 'Nonte left for salon by customer.'
+        email:
+          $ref: '#/components/schemas/Email'
+        image_url:
+          $ref: '#/components/schemas/ImageUrl'
+        phone:
+          $ref: '#/components/schemas/Phone'
+        
+    DisplayName:
+      type: string
+      example: 'Pretty Name'
+      description: 'UI friendly name.'
+      
+    HumanName:
+      type: string
+      example: 'John Doe'
+      description: 'A persons name.'
+      
+    ModelName:
+      type: string
+      example: 'ThingAndStuff'
+      description: 'Name of model.'
+      
+    Phone:
+      type: string
+      example: '+353871638849'
+      format: 'phone'
+      description: 'Telephone number of model.'
+      
+    Email:
+      type: string
+      example: 'test@gmail.com'
+      format: 'email'
+      description: 'Email address of model.'
+          
+    Address:
+      type: object
+      required:
+       - display
+       - geohash
+       - id
+       - lat
+       - lng
+       - place_id
+      properties:
+        display:
+          $ref: '#/components/schemas/DisplayName'
+        geohash:
+          $ref: '#/components/schemas/MapsId'
+        id:
+          $ref: '#/components/schemas/FirebaseId'
+        lat:
+          type: number
+          example: 52.859896
+          description: 'Latitude of address.'
+        lng:
+          type: number
+          example: -34.859786
+          description: 'Longitude of address.'
+        place_id:
+          $ref: '#/components/schemas/MapsId'
+          
+    StripeAddress:
+      type: object
+      properties:
+        city:
+          type: string
+          example: 'Navan'
+        country:
+          type: string
+          example: 'Ireland'
+        line1:
+          type: string
+          example: 'Address line 1'
+        line2:
+          type: string
+          example: 'Address line 2'
+        state:
+          type: string
+          example: 'Meath'
+        postal_code:
+          type: string
+          example: 'A65 F4E2'
+          
+          
+    ProductDescription:
+      type: string
+      example: 'Hair services.'
+      description: 'Description of product ro services being offered. Needed for stripe.'
+          
+    TaxId:
+      type: string
+      example: 'xxx-xxxx'
+      description: 'Tax identification number for business. Needed for Stripe.'
+    
+    
+    FirebaseTimestamp:
+      type: object
+      required:
+        - seconds
+      properties:
+        seconds:
+          type: number
+          example: 1640007757
+          description: 'Seconds since Jan 1 1970.'
+        nanoseconds:
+          type: number
+          example: 4541657
+          description: 'Nanoseconds since Second passed.'
+    
+    ImageUrl:
+      type: string
+      example: 'https://firebasestorage.googleapis.com/v0/b/cosmetics-dev-a0f0f.appspot.com/o/686Stqiae0bENoJgVLcPbxacHxR2%2Fphotos%2F1629385792?alt=media&token=9f3c16b7-16de-49ad-824a-9f8b6c20ce1a'
+      description: 'Url of image.'
+      
+    FirebaseId:
+      type: string
+      example: 'GhIJCvt2EhFuSkARD_vzIzT0IcA'
+      description: 'Unique firebase id.'
+      
+    StripeId:
+      type: string
+      example: 'pm_GhIJCvt2EhFuSkARD_vzIzT0IcA'
+      description: 'Stripe specific id: payment_intent, payment_method, bank_account, etc.'
+      
+    Status:
+      type: string
+      enum: ['scheduled', 'complete', 'cancelled', 'error']
+      example: 'scheduled'
+      description: 'Status of the object.'
+      
+    MapsId:
+      type: string
+      example: 'gc3sewz5jw'
+      description: 'Unique place id or geohash.'
+    
+    Employee:
+      type: object
+      required:
+        - id
+        - available
+        - bookEvery
+        - name
+        - owner_id
+        - profession
+        - hours
+      properties:
+        id:
+          $ref: '#/components/schemas/FirebaseId'
+        available:
+          type: boolean
+          example: true
+          description: 'Whether the Employee is available for booking.'
+        bookEvery:
+          type: number
+          example: 30
+          description: 'If an Employee is available to book every 30 mins, and a booking ends at xx:10, they wont be available to book again until xx:30'
+        image_url:
+          $ref: '#/components/schemas/ImageUrl'
+        name:
+          type: string
+          example: 'John Doe'
+          description: 'Employee name.'
+        owner_id:
+          $ref: '#/components/schemas/FirebaseId'
+        profession:
+          type: string
+          enum: [
+            'Aesthetics Treatments',
+            'Body Exfoliation',
+            'Brows',
+            'Cosmetics Denistry',
+            'Cosmetics Surgery',
+            'Dental Prosthetics',
+            'Hair',
+            'Hair Removal',
+            'Lashes',
+            'Nails',
+            'Make-Up',
+            'Skin Care',
+            'Spa & Massage',
+            'Tanning',
+            'Other'
+          ]
+          example: 'Stylist' 
+          description: 'Profession of Employee.'
+        hours:
+          type: array
+          example: [{ starts: '09:00', ends: '17:00', working: true }]
+          description: 'Array of length 7 containing details on the Employee hours. Monday = 0.'
           items:
-            $ref: "#/definitions/User"
-      responses:
-        default:
-          description: "successful operation"
-  /user/createWithList:
-    post:
-      tags:
-      - "user"
-      summary: "Creates list of users with given input array"
-      description: ""
-      operationId: "createUsersWithListInput"
-      consumes:
-      - "application/json"
-      produces:
-      - "application/json"
-      - "application/xml"
-      parameters:
-      - in: "body"
-        name: "body"
-        description: "List of user object"
-        required: true
-        schema:
-          type: "array"
-          items:
-            $ref: "#/definitions/User"
-      responses:
-        default:
-          description: "successful operation"
-  /user/{username}:
-    get:
-      tags:
-      - "user"
-      summary: "Get user by user name"
-      description: ""
-      operationId: "getUserByName"
-      produces:
-      - "application/json"
-      - "application/xml"
-      parameters:
-      - name: "username"
-        in: "path"
-        description: "The name that needs to be fetched. Use user1 for testing. "
-        required: true
-        type: "string"
-      responses:
-        200:
-          description: "successful operation"
-          schema:
-            $ref: "#/definitions/User"
-        400:
-          description: "Invalid username supplied"
-        404:
-          description: "User not found"
-    put:
-      tags:
-      - "user"
-      summary: "Updated user"
-      description: "This can only be done by the logged in user."
-      operationId: "updateUser"
-      consumes:
-      - "application/json"
-      produces:
-      - "application/json"
-      - "application/xml"
-      parameters:
-      - name: "username"
-        in: "path"
-        description: "name that need to be updated"
-        required: true
-        type: "string"
-      - in: "body"
-        name: "body"
-        description: "Updated user object"
-        required: true
-        schema:
-          $ref: "#/definitions/User"
-      responses:
-        400:
-          description: "Invalid user supplied"
-        404:
-          description: "User not found"
-    delete:
-      tags:
-      - "user"
-      summary: "Delete user"
-      description: "This can only be done by the logged in user."
-      operationId: "deleteUser"
-      produces:
-      - "application/json"
-      - "application/xml"
-      parameters:
-      - name: "username"
-        in: "path"
-        description: "The name that needs to be deleted"
-        required: true
-        type: "string"
-      responses:
-        400:
-          description: "Invalid username supplied"
-        404:
-          description: "User not found"
-  /user/login:
-    get:
-      tags:
-      - "user"
-      summary: "Logs user into the system"
-      description: ""
-      operationId: "loginUser"
-      produces:
-      - "application/json"
-      - "application/xml"
-      parameters:
-      - name: "username"
-        in: "query"
-        description: "The user name for login"
-        required: true
-        type: "string"
-      - name: "password"
-        in: "query"
-        description: "The password for login in clear text"
-        required: true
-        type: "string"
-      responses:
-        200:
-          description: "successful operation"
-          headers:
-            X-Expires-After:
-              type: "string"
-              format: "date-time"
-              description: "date in UTC when token expires"
-            X-Rate-Limit:
-              type: "integer"
-              format: "int32"
-              description: "calls per hour allowed by the user"
-          schema:
-            type: "string"
-        400:
-          description: "Invalid username/password supplied"
-  /user/logout:
-    get:
-      tags:
-      - "user"
-      summary: "Logs out current logged in user session"
-      description: ""
-      operationId: "logoutUser"
-      produces:
-      - "application/json"
-      - "application/xml"
-      parameters: []
-      responses:
-        default:
-          description: "successful operation"
-  /user:
-    post:
-      tags:
-      - "user"
-      summary: "Create user"
-      description: "This can only be done by the logged in user."
-      operationId: "createUser"
-      consumes:
-      - "application/json"
-      produces:
-      - "application/json"
-      - "application/xml"
-      parameters:
-      - in: "body"
-        name: "body"
-        description: "Created user object"
-        required: true
-        schema:
-          $ref: "#/definitions/User"
-      responses:
-        default:
-          description: "successful operation"
-securityDefinitions:
-  api_key:
-    type: "apiKey"
-    name: "api_key"
-    in: "header"
-  petstore_auth:
-    type: "oauth2"
-    authorizationUrl: "https://petstore.swagger.io/oauth/authorize"
-    flow: "implicit"
-    scopes:
-      read:pets: "read your pets"
-      write:pets: "modify pets in your account"
-definitions:
-  ApiResponse:
-    type: "object"
-    properties:
-      code:
-        type: "integer"
-        format: "int32"
-      type:
-        type: "string"
-      message:
-        type: "string"
-  Category:
-    type: "object"
-    properties:
-      id:
-        type: "integer"
-        format: "int64"
-      name:
-        type: "string"
-    xml:
-      name: "Category"
-  Pet:
-    type: "object"
-    required:
-    - "name"
-    - "photoUrls"
-    properties:
-      id:
-        type: "integer"
-        format: "int64"
-      category:
-        $ref: "#/definitions/Category"
-      name:
-        type: "string"
-        example: "doggie"
-      photoUrls:
-        type: "array"
-        xml:
-          wrapped: true
-        items:
-          type: "string"
-          xml:
-            name: "photoUrl"
-      tags:
-        type: "array"
-        xml:
-          wrapped: true
-        items:
-          xml:
-            name: "tag"
-          $ref: "#/definitions/Tag"
-      status:
-        type: "string"
-        description: "pet status in the store"
-        enum:
-        - "available"
-        - "pending"
-        - "sold"
-    xml:
-      name: "Pet"
-  Tag:
-    type: "object"
-    properties:
-      id:
-        type: "integer"
-        format: "int64"
-      name:
-        type: "string"
-    xml:
-      name: "Tag"
-  Order:
-    type: "object"
-    properties:
-      id:
-        type: "integer"
-        format: "int64"
-      petId:
-        type: "integer"
-        format: "int64"
-      quantity:
-        type: "integer"
-        format: "int32"
-      shipDate:
-        type: "string"
-        format: "date-time"
-      status:
-        type: "string"
-        description: "Order Status"
-        enum:
-        - "placed"
-        - "approved"
-        - "delivered"
-      complete:
-        type: "boolean"
-    xml:
-      name: "Order"
-  User:
-    type: "object"
-    properties:
-      id:
-        type: "integer"
-        format: "int64"
-      username:
-        type: "string"
-      firstName:
-        type: "string"
-      lastName:
-        type: "string"
-      email:
-        type: "string"
-      password:
-        type: "string"
-      phone:
-        type: "string"
-      userStatus:
-        type: "integer"
-        format: "int32"
-        description: "User Status"
-    xml:
-      name: "User"
-externalDocs:
-  description: "Find out more about Swagger"
-  url: "http://swagger.io"
+            type: object
+            properties:
+              starts:
+                type: string
+                example: '09:00'
+                description: 'Starting time of Employee in plain text. (24h)'
+              ends:
+                type: string
+                example: '17:00'
+                description: 'Starting time of Employee in plain text. (24h)'
+              working:
+                type: boolean
+                description: 'If the Employee is working that day.'
